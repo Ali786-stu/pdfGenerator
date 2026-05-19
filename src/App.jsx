@@ -44,7 +44,13 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [shareFallbackData, setShareFallbackData] = useState(null);
+  const [validationError, setValidationError] = useState("");
   const pdfRef = useRef();
+
+  // --- CLEAR VALIDATION ERROR ON TAB CHANGE ---
+  useEffect(() => {
+    setValidationError("");
+  }, [activeTab]);
 
   // --- PWA INSTALLATION DETECTOR ---
   useEffect(() => {
@@ -417,6 +423,61 @@ export default function App() {
     setInvoiceData({ ...invoiceData, descriptionList: updated });
   };
 
+  // --- DYNAMIC FORM FIELD VALIDATIONS ---
+  const handleGeneratePreview = () => {
+    setValidationError("");
+
+    if (activeTab === "invoice") {
+      if (!invoiceData.invoiceNo.trim()) {
+        setValidationError("Invoice Number is required! Please fill Invoice No.");
+        return;
+      }
+      if (!invoiceData.date) {
+        setValidationError("Invoice Date is required! Please select a Date.");
+        return;
+      }
+      if (!invoiceData.clientName.trim()) {
+        setValidationError("Customer Name is required! Please fill Customer Name.");
+        return;
+      }
+      if (!invoiceData.clientMobile.trim()) {
+        setValidationError("Customer Mobile is required! Please fill Mobile.");
+        return;
+      }
+      if (invoiceData.clientMobile.length !== 10) {
+        setValidationError("Customer Mobile must be exactly 10 digits!");
+        return;
+      }
+    } else {
+      if (!amcData.clientName.trim()) {
+        setValidationError("Customer Name is required! Please fill Customer Name.");
+        return;
+      }
+      if (!amcData.mobile.trim()) {
+        setValidationError("Customer Mobile is required! Please fill Mobile.");
+        return;
+      }
+      if (amcData.mobile.length !== 10) {
+        setValidationError("Customer Mobile must be exactly 10 digits!");
+        return;
+      }
+      if (amcData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(amcData.email.trim())) {
+        setValidationError("Please enter a valid Email Address (e.g. name@domain.com)!");
+        return;
+      }
+      if (!amcData.fromDate) {
+        setValidationError("Contract Start Date (Agreement From) is required!");
+        return;
+      }
+      if (!amcData.toDate) {
+        setValidationError("Contract End Date (Agreement To) is required!");
+        return;
+      }
+    }
+
+    setViewState("preview");
+  };
+
   // Dynamic Theme Styling Classes for A4 Document
   const getThemeStyles = () => {
     switch (activeTemplate) {
@@ -673,7 +734,7 @@ export default function App() {
                       <input
                         type="text"
                         value={invoiceData.clientMobile}
-                        onChange={(e) => setInvoiceData({ ...invoiceData, clientMobile: e.target.value })}
+                        onChange={(e) => setInvoiceData({ ...invoiceData, clientMobile: e.target.value.replace(/\D/g, "").slice(0, 10) })}
                         className="w-full bg-slate-950/40 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -889,7 +950,7 @@ export default function App() {
                       <input
                         type="text"
                         value={amcData.mobile}
-                        onChange={(e) => setAmcData({ ...amcData, mobile: e.target.value })}
+                        onChange={(e) => setAmcData({ ...amcData, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) })}
                         className="w-full bg-slate-950/40 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -1018,10 +1079,18 @@ export default function App() {
               </div>
             )}
 
+            {/* Validation Error Message */}
+            {validationError && (
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/35 rounded-2xl text-rose-400 text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-bounce shadow-lg shadow-rose-950/20">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-ping flex-shrink-0"></span>
+                <span className="leading-tight">⚠️ {validationError}</span>
+              </div>
+            )}
+
             {/* 4. HUGE GENERATE BUTTON */}
             <div className="pt-4 border-t border-slate-800/40">
               <button
-                onClick={() => setViewState("preview")}
+                onClick={handleGeneratePreview}
                 className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-black text-xs sm:text-sm tracking-widest uppercase transition-all shadow-xl hover:shadow-blue-500/20 active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Eye size={18} /> Generate Document Live Preview
