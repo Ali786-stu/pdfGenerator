@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import {
   FileText,
   ClipboardList,
@@ -25,7 +25,8 @@ import {
   Sliders,
   Check,
   Layers,
-  X
+  X,
+  Share2
 } from "lucide-react";
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
   const [mobileScale, setMobileScale] = useState(1); // Auto-scale to fit mobile viewports
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [shareFallbackData, setShareFallbackData] = useState(null);
   const pdfRef = useRef();
 
   // --- PWA INSTALLATION DETECTOR ---
@@ -324,14 +326,73 @@ export default function App() {
       
       pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight, "", "FAST");
       
-      const selectedTheme = templatesList.find(t => t.id === activeTemplate)?.name.replace(/\s+/g, "_");
+      const selectedTheme = (templatesList.find(t => t.id === activeTemplate)?.name || "Theme").replace(/\s+/g, "_");
       const documentName = activeTab === "invoice" 
-        ? `Invoice_${invoiceData.invoiceNo}_${selectedTheme}`
-        : `AMC_${amcData.clientName.replace(/\s+/g, "_")}_${selectedTheme}`;
+        ? `Invoice_${(invoiceData.invoiceNo || "Draft").trim()}_${selectedTheme}`
+        : `AMC_${(amcData.clientName || "Contract").trim().replace(/\s+/g, "_")}_${selectedTheme}`;
       
       pdf.save(`${documentName}.pdf`);
     } catch (error) {
       console.error("PDF generation failed:", error);
+      alert("PDF download failed: " + error.message);
+    } finally {
+      element.style.transform = `scale(${zoom * mobileScale})`;
+      element.style.transformOrigin = "top center";
+    }
+  };
+
+  // --- NATIVE MOBILE SHARING FUNCTION ---
+  const sharePDF = async () => {
+    const element = pdfRef.current;
+    const originalTransform = element.style.transform;
+    const originalTransformOrigin = element.style.transformOrigin;
+    
+    element.style.transform = "none";
+    element.style.transformOrigin = "unset";
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2.2, // Crisp density
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+      
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgWidth = 210;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight, "", "FAST");
+      
+      const selectedTheme = (templatesList.find(t => t.id === activeTemplate)?.name || "Theme").replace(/\s+/g, "_");
+      const documentName = activeTab === "invoice" 
+        ? `Invoice_${(invoiceData.invoiceNo || "Draft").trim()}_${selectedTheme}`
+        : `AMC_${(amcData.clientName || "Contract").trim().replace(/\s+/g, "_")}_${selectedTheme}`;
+      
+      const pdfBlob = pdf.output("blob");
+      const file = new File([pdfBlob], `${documentName}.pdf`, { type: "application/pdf" });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `${documentName}.pdf`,
+          text: `Here is your dynamic PDF document from ${shopDetails.name}.`,
+        });
+      } else {
+        // WebView / Insecure context fallback: launch custom full-screen sharing sheet!
+        const pdfDataUri = pdf.output("datauristring");
+        setShareFallbackData({
+          imgData: imgData,
+          pdfDataUri: pdfDataUri,
+          documentName: `${documentName}.pdf`,
+          rawPdf: pdf
+        });
+      }
+    } catch (error) {
+      console.error("PDF sharing failed:", error);
+      alert("PDF sharing failed: " + error.message);
     } finally {
       element.style.transform = `scale(${zoom * mobileScale})`;
       element.style.transformOrigin = "top center";
@@ -1015,13 +1076,19 @@ export default function App() {
               </button>
             </div>
 
-            {/* Right aligned: Print & Save buttons */}
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {/* Right aligned: Print, Share & Save buttons */}
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
               <button
                 onClick={() => setViewState("form")}
-                className="text-[10px] sm:text-xs font-bold bg-slate-800 hover:bg-slate-750 text-slate-300 px-3.5 py-2.5 rounded-xl border border-slate-700 transition"
+                className="text-[10px] sm:text-xs font-bold bg-slate-800 hover:bg-slate-750 text-slate-300 px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer"
               >
                 Edit
+              </button>
+              <button
+                onClick={sharePDF}
+                className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[10px] sm:text-xs font-black px-4.5 py-2.5 rounded-xl shadow-lg transition active:scale-95 cursor-pointer"
+              >
+                <Share2 size={13} /> Share PDF
               </button>
               <button
                 onClick={downloadPDF}
@@ -1035,21 +1102,25 @@ export default function App() {
 
           {/* Master Scaling Workspace Frame - Responsive viewport fit */}
           <div 
-            className="w-full flex justify-center py-6 bg-slate-950/80 rounded-3xl border border-slate-900 shadow-inner overflow-hidden relative"
-            style={{ height: `${dynamicContainerHeight + 48}px` }}
+            className="flex justify-center bg-slate-950/80 rounded-3xl border border-slate-900 shadow-inner overflow-hidden relative mx-auto"
+            style={{ 
+              width: `${794 * zoom * mobileScale}px`,
+              height: `${1123 * zoom * mobileScale}px` 
+            }}
           >
             
             {/* A4 Sheet block */}
             <div 
               ref={pdfRef}
-              className="w-[210mm] min-h-[297mm] bg-white text-slate-800 p-[12mm] shadow-2xl relative flex flex-col justify-between"
+              id="rep-wallah-a4-sheet"
+              className="w-[794px] h-[1123px] bg-white text-slate-800 p-[12mm] shadow-2xl absolute"
               style={{ 
                 boxSizing: "border-box", 
                 transform: `scale(${zoom * mobileScale})`, 
                 transformOrigin: "top center",
-                margin: "0 auto",
-                width: "210mm",
-                height: "297mm"
+                left: "50%",
+                marginLeft: "-397px", // center the absolute A4 sheet!
+                top: 0
               }}
             >
               
@@ -1572,6 +1643,112 @@ export default function App() {
                 className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-black rounded-xl transition cursor-pointer"
               >
                 Close Selector
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          FLOW 3: MOBILE SHARING ASSISTANT MODAL (FOR WEBVIEWS & HTTP DEVS)
+          ======================================================== */}
+      {shareFallbackData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-[420px] rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-800/60 flex justify-between items-center bg-slate-950/40">
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                  <Sparkles className="text-blue-500 w-4 h-4" /> Share & Save Assistant
+                </h3>
+                <p className="text-[9px] text-slate-400 mt-0.5">Insecure Connection or WebView Fallback</p>
+              </div>
+              <button
+                onClick={() => setShareFallbackData(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content Scrollable Area */}
+            <div className="p-5 overflow-y-auto custom-scrollbar flex-grow space-y-5 text-center">
+              
+              {/* Alert Badge explaining what happened */}
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-3 text-[10px] sm:text-xs text-amber-300 leading-relaxed text-left space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  ⚠️ Note / Dhyan De:
+                </p>
+                <p>
+                  Aap abhi <strong>HTTP (Local Server)</strong> ya phone ke kisi <strong>in-app browser (jaise WhatsApp/Instagram)</strong> par hain. Browsers security ke liye insecure websites par direct sharing block kar dete hain.
+                </p>
+              </div>
+
+              {/* Instructions Steps */}
+              <div className="text-left space-y-3">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-2 border-blue-500 pl-2">
+                  Follow these steps to share/save:
+                </h4>
+                
+                <div className="space-y-2 text-[11px] text-slate-350">
+                  <div className="flex gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600/20 text-blue-400 font-extrabold flex items-center justify-center shrink-0">1</span>
+                    <p className="leading-snug">
+                      <strong>Long-press (daba kar rakhein)</strong> the document preview image below to save it as an image or share it directly to WhatsApp!
+                    </p>
+                  </div>
+                  
+                  <div className="flex gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600/20 text-blue-400 font-extrabold flex items-center justify-center shrink-0">2</span>
+                    <p className="leading-snug">
+                      Or click <strong>"Open Direct PDF"</strong> below to view the full PDF in a clean window, where you can natively save/print!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* High-res Image Preview representing the A4 page */}
+              <div className="space-y-1.5">
+                <span className="text-[9px] bg-slate-800 text-slate-400 font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                  Document Preview (Tap & Hold to save)
+                </span>
+                <div className="border border-slate-800 rounded-2xl overflow-hidden bg-white max-w-[280px] mx-auto shadow-lg group relative">
+                  <img 
+                    src={shareFallbackData.imgData} 
+                    alt="Compiled Document Preview"
+                    className="w-full h-auto select-none pointer-events-auto"
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Actions Footer */}
+            <div className="px-5 py-4 bg-slate-950/60 border-t border-slate-800/60 grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => {
+                  const newWindow = window.open();
+                  if (newWindow) {
+                    newWindow.document.write(
+                      `<iframe src="${shareFallbackData.pdfDataUri}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`
+                    );
+                  } else {
+                    alert("Pop-up blocker active. Please allow popups for this site or use standard download.");
+                  }
+                }}
+                className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-500 hover:to-indigo-500 text-white text-[10px] sm:text-xs font-black rounded-xl transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                Open Direct PDF
+              </button>
+              <button
+                onClick={() => {
+                  shareFallbackData.rawPdf.save(shareFallbackData.documentName);
+                }}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] sm:text-xs font-black rounded-xl transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Download size={12} /> Download PDF
               </button>
             </div>
 
