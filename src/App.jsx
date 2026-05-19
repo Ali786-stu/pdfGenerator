@@ -466,6 +466,15 @@ export default function App() {
 
           {/* Theme & Actions Tab Bar */}
           <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-850">
+            {isInstallable && (
+              <button
+                onClick={handleInstallClick}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-550 text-white text-[10px] md:text-xs font-black px-3.5 py-2 rounded-xl shadow-lg shadow-blue-500/10 transition active:scale-95 cursor-pointer animate-pulse"
+              >
+                <Download size={12} /> Install App
+              </button>
+            )}
+
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               className={`p-2 rounded-xl border transition-all active:scale-90 ${theme === "dark" ? "bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700" : "bg-slate-100 border-slate-200 text-indigo-600 hover:bg-slate-200"}`}
