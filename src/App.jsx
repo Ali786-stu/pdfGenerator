@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas-pro";
+import { toJpeg } from "html-to-image";
 import {
   FileText,
   ClipboardList,
@@ -310,25 +310,31 @@ export default function App() {
   // --- DOWNLOAD PDF FUNCTION ---
   const downloadPDF = async () => {
     const element = pdfRef.current;
-    const originalTransform = element.style.transform;
-    const originalTransformOrigin = element.style.transformOrigin;
     
+    // Disable scaling temporarily to get native resolution
     element.style.transform = "none";
     element.style.transformOrigin = "unset";
 
+    // Wait for a brief moment to ensure fonts and layout reflows are painted
+    await new Promise(resolve => setTimeout(resolve, 150));
+
     try {
-      const canvas = await html2canvas(element, {
-        scale: 2.2, // Crisp density
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
+      // Use html-to-image for absolutely perfect, ultra-crisp modern CSS rendering
+      const imgData = await toJpeg(element, { 
+        quality: 1.0, 
+        pixelRatio: 2.5, // Ultra HD crispness
+        backgroundColor: '#ffffff',
+        style: {
+          transform: 'none',
+          transformOrigin: 'unset',
+          margin: '0'
+        }
       });
       
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
-      const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgWidth = 210; // A4 standard width in mm
+      // Compute accurate height based on A4 aspect ratio (210x297)
+      const imgHeight = (element.offsetHeight * imgWidth) / element.offsetWidth;
       
       pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight, "", "FAST");
       
@@ -350,25 +356,27 @@ export default function App() {
   // --- NATIVE MOBILE SHARING FUNCTION ---
   const sharePDF = async () => {
     const element = pdfRef.current;
-    const originalTransform = element.style.transform;
-    const originalTransformOrigin = element.style.transformOrigin;
     
     element.style.transform = "none";
     element.style.transformOrigin = "unset";
 
+    await new Promise(resolve => setTimeout(resolve, 150));
+
     try {
-      const canvas = await html2canvas(element, {
-        scale: 2.2, // Crisp density
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
+      const imgData = await toJpeg(element, { 
+        quality: 1.0, 
+        pixelRatio: 2.5,
+        backgroundColor: '#ffffff',
+        style: {
+          transform: 'none',
+          transformOrigin: 'unset',
+          margin: '0'
+        }
       });
       
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgHeight = (element.offsetHeight * imgWidth) / element.offsetWidth;
       
       pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight, "", "FAST");
       
@@ -387,7 +395,6 @@ export default function App() {
           text: `Here is your dynamic PDF document from ${shopDetails.name}.`,
         });
       } else {
-        // WebView / Insecure context fallback: launch custom full-screen sharing sheet!
         const pdfDataUri = pdf.output("datauristring");
         setShareFallbackData({
           imgData: imgData,
@@ -1178,13 +1185,13 @@ export default function App() {
             }}
           >
             
-            {/* A4 Sheet block */}
+            {/* A4 Sheet Positioning Wrapper */}
             <div 
-              ref={pdfRef}
-              id="rep-wallah-a4-sheet"
-              className="w-[794px] h-[1123px] bg-white text-slate-800 p-[12mm] shadow-2xl absolute"
+              id="rep-wallah-a4-sheet-wrapper"
+              className="absolute"
               style={{ 
-                boxSizing: "border-box", 
+                width: "794px",
+                height: "1123px",
                 transform: `scale(${zoom * mobileScale})`, 
                 transformOrigin: "top center",
                 left: "50%",
@@ -1192,6 +1199,12 @@ export default function App() {
                 top: 0
               }}
             >
+              {/* Actual PDF Capture Target (Pure Block Element) */}
+              <div 
+                ref={pdfRef}
+                className="w-full h-full bg-white text-slate-800 p-[12mm] shadow-2xl"
+                style={{ boxSizing: "border-box" }}
+              >
               
               {activeTab === "invoice" ? (
                 
@@ -1557,6 +1570,7 @@ export default function App() {
 
               )}
 
+            </div>
             </div>
 
           </div>
