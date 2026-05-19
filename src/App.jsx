@@ -113,7 +113,7 @@ export default function App() {
     clientAddress: "",
     clientMobile: "",
     clientState: "",
-    receivedAmount: 0,
+    receivedAmount: "",
     notes: "",
     terms: "",
     bankName: "",
@@ -124,8 +124,8 @@ export default function App() {
       {
         name: "",
         hsn: "",
-        qty: 1,
-        price: 0,
+        qty: "",
+        price: "",
       },
     ],
     descriptionList: [
@@ -151,10 +151,10 @@ export default function App() {
     model: "",
     type: "",
     capacity: "",
-    qty: 1,
+    qty: "",
     fromDate: "",
     toDate: "",
-    totalAmount: 0,
+    totalAmount: "",
     paymentMode: "",
     servicesCovered: [
       "Four routine services per year (Indoor & Outdoor cleaning).",
@@ -219,14 +219,16 @@ export default function App() {
   const handleInvoiceItemChange = (index, field, value) => {
     const updated = [...invoiceData.items];
     updated[index][field] =
-      field === "qty" || field === "price" ? Number(value) : value;
+      field === "qty" || field === "price"
+        ? value === "" ? "" : Number(value)
+        : value;
     setInvoiceData({ ...invoiceData, items: updated });
   };
 
   const addInvoiceItem = () => {
     setInvoiceData({
       ...invoiceData,
-      items: [...invoiceData.items, { name: "", hsn: "", qty: 1, price: 0 }],
+      items: [...invoiceData.items, { name: "", hsn: "", qty: "", price: "" }],
     });
   };
 
@@ -236,13 +238,13 @@ export default function App() {
   };
 
   const calculateSubTotal = () =>
-    invoiceData.items.reduce((sum, item) => sum + item.qty * item.price, 0);
+    invoiceData.items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
 
   const calculateTotalQty = () =>
     invoiceData.items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
 
   const subTotalAmount = calculateSubTotal();
-  const balanceAmount = subTotalAmount - invoiceData.receivedAmount;
+  const balanceAmount = subTotalAmount - Number(invoiceData.receivedAmount || 0);
 
   // Number to words converter
   const numberToWords = (num) => {
